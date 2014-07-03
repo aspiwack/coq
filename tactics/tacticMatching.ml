@@ -122,7 +122,7 @@ module PatternMatching (E:StaticEnvironment) = struct
   (* spiwack: as we don't benefit from the various stream optimisations
      of Haskell, it may be costly to give the monad in direct style such as
      here. We may want to use some continuation passing style. *)
-  type 'a m = 'a t IStream.t
+  type 'a m = unit t -> 'a t IStream.t
 
 
   (** The empty substitution. *)
@@ -153,64 +153,53 @@ module PatternMatching (E:StaticEnvironment) = struct
 
   (** Monadic [return]: returns a single success with empty substitutions. *)
   let return (type a) (lhs:a) : a m =
-    let success = {
-      subst = empty_subst ;
-      context = empty_context_subst ;
-      terms = empty_term_subst ;
-      lhs = lhs ; }
-    in
-    IStream.(cons success empty)
+    fun st -> IStream.(cons { st with lhs } empty)
 
   (** Monadic bind: each success of [x] is replaced by the successes
       of [f x]. The substitutions of [x] and [f x] are composed,
       dropping the apparent successes when the substitutions are not
       coherent. *)
-  let (>>=) (type a) (type b) (x:a m) (f:a -> b m) : b m =
+  let (>>=) (type a) (type b) (x:a m) (f:a -> b m) : b m = fun st ->
     let open IStream in
-    concat_map begin fun { subst=substx; context=contextx; terms=termsx; lhs=lhsx } ->
-      map_filter begin fun { subst=substf; context=contextf; terms=termsf; lhs=lhsf } ->
-        try
-          Some {
-            subst = subst_prod substx substf ;
-            context = context_subst_prod contextx contextf ;
-            terms = term_subst_prod termsx termsf ;
-            lhs = lhsf
-          }
-        with Not_coherent_metas -> None
-      end (f lhsx)
-    end x
+    concat_map begin fun ( { lhs=lhsx } as stx )->
+      f lhsx { stx with lhs=() }
+    end (x st)
 
   (** A variant of [(>>=)] when the first argument returns [unit]. *)
-  let (<*>) (type a) (x:unit m) (y:a m) : a m =
+  let (<*>) (type a) (x:unit m) (y:a m) : a m = fun st ->
     let open IStream in
-    concat_map begin fun { subst=substx; context=contextx; terms=termsx; lhs=() } ->
-      map_filter begin fun { subst=substy; context=contexty; terms=termsy; lhs=lhsy } ->
-        try
-          Some {
-            subst = subst_prod substx substy ;
-            context = context_subst_prod contextx contexty ;
-            terms = term_subst_prod termsx termsy ;
-            lhs = lhsy
-          }
-        with Not_coherent_metas -> None
-      end y
-    end x
+    concat_map begin fun stx ->
+      y stx
+    end (x st)
 
   (** Failure of the pattern-matching monad: no success. *)
-  let fail (type a) : a m = IStream.empty
+  let fail (type a) : a m = fun _ -> IStream.empty
 
-  (** Chooses in a list, in the same order as the list *)
-  let pick (type a) (l:a list) : a m =
+  let lift (type a) (x:a IStream.t) : a m = fun st ->
     IStream.map begin fun x ->
+      { st with lhs = x }
+    end x
+
+  let empty_state : unit t =
       { subst = empty_subst ;
         context = empty_context_subst ;
         terms = empty_term_subst ;
-        lhs = x }
-    end (IStream.of_list l)
+        lhs = () }
+
+  (** Chooses in a list, in the same order as the list *)
+  let pick (type a) (l:a list) : a m =
+    lift (IStream.of_list l)
 
   (** Declares a subsitution, a context substitution and a term substitution. *)
-  let put subst context terms : unit m =
-    IStream.(cons { subst ; context ; terms ; lhs = () } empty)
+  let put subst context terms : unit m = fun { subst=substx; context=contextx; terms=termsx } ->
+    try
+      IStream.(cons {
+        subst = subst_prod substx subst ;
+        context = context_subst_prod contextx context ;
+        terms = term_subst_prod termsx terms ;
+        lhs = ()
+      } empty)
+    with Not_coherent_metas -> IStream.empty
 
   (** Declares a substitution. *)
   let put_subst subst : unit m = put subst empty_context_subst empty_term_subst
@@ -242,14 +231,12 @@ module PatternMatching (E:StaticEnvironment) = struct
           with ConstrMatching.PatternMatchingFailure -> fail
         end
     | Subterm (with_app_context,id_ctxt,p) ->
-        (* spiwack: this branch is easier in direct style, would need to be
-           changed if the implementation of the monad changes. *)
-        IStream.map begin fun { ConstrMatching.m_sub ; m_ctx } ->
-          let subst = adjust m_sub in
-          let context = id_map_try_add id_ctxt m_ctx Id.Map.empty in
-          let terms = empty_term_subst in
-          { subst ; context ; terms ; lhs }
-        end (ConstrMatching.match_subterm_gen with_app_context p term)
+        lift (ConstrMatching.match_subterm_gen with_app_context p term) >>= fun { ConstrMatching.m_sub ; m_ctx } ->
+        let subst = adjust m_sub in
+        let context = id_map_try_add id_ctxt m_ctx Id.Map.empty in
+        let terms = empty_term_subst in
+        put subst context terms <*>
+        return lhs
 
 
   (** [rule_match_term term rule] matches the term [term] with the
@@ -264,7 +251,8 @@ module PatternMatching (E:StaticEnvironment) = struct
   (** [match_term term rules] matches the term [term] with the set of
       matching rules [rules].*)
   let match_term term rules =
-    IStream.(concat (map (fun r -> rule_match_term term r) (of_list rules)))
+    pick rules >>= fun r ->
+    rule_match_term term r
 
 
 
@@ -332,7 +320,8 @@ module PatternMatching (E:StaticEnvironment) = struct
   (** [match_goal hyps concl rules] matches the goal [hyps|-concl]
       with the set of matching rules [rules]. *)
   let match_goal hyps concl rules =
-    IStream.(concat (map (fun r -> rule_match_goal hyps concl r) (of_list rules)))
+    pick rules >>= fun r ->
+    rule_match_goal hyps concl r
 
 end
 
@@ -346,7 +335,7 @@ let match_term env sigma term rules =
     let sigma = sigma
   end in
   let module M = PatternMatching(E) in
-  M.match_term term rules
+  M.match_term term rules M.empty_state
 
 
 (** [match_goal env sigma hyps concl rules] matches the goal
@@ -360,4 +349,4 @@ let match_goal env sigma hyps concl rules =
     let sigma = sigma
   end in
   let module M = PatternMatching(E) in
-  M.match_goal hyps concl rules
+  M.match_goal hyps concl rules M.empty_state
