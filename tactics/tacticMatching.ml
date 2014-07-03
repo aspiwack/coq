@@ -119,10 +119,10 @@ module PatternMatching (E:StaticEnvironment) = struct
   (** To focus on the algorithmic portion of pattern-matching, the
       bookkeeping is relegated to a monad: the composition of the
       bactracking monad of {!IStream.t} with a "writer" effect. *)
-  (* spiwack: as we don't benefit from the various stream optimisations
-     of Haskell, it may be costly to give the monad in direct style such as
-     here. We may want to use some continuation passing style. *)
-  type 'a m = unit t -> 'a t IStream.t
+  type 'a m = { go : 'r. (unit t -> 'a -> 'r IStream.t) -> unit t -> 'r IStream.t }
+
+  let run (type a) (x:a m) (st:unit t) : a t IStream.t =
+    x.go (fun st' a -> IStream.(cons { st' with lhs=a } empty)) st
 
 
   (** The empty substitution. *)
@@ -153,32 +153,29 @@ module PatternMatching (E:StaticEnvironment) = struct
 
   (** Monadic [return]: returns a single success with empty substitutions. *)
   let return (type a) (lhs:a) : a m =
-    fun st -> IStream.(cons { st with lhs } empty)
+    { go = fun k st -> k st lhs }
 
   (** Monadic bind: each success of [x] is replaced by the successes
       of [f x]. The substitutions of [x] and [f x] are composed,
       dropping the apparent successes when the substitutions are not
       coherent. *)
-  let (>>=) (type a) (type b) (x:a m) (f:a -> b m) : b m = fun st ->
-    let open IStream in
-    concat_map begin fun ( { lhs=lhsx } as stx )->
-      f lhsx { stx with lhs=() }
-    end (x st)
+  let (>>=) (type a) (type b) (x:a m) (f:a -> b m) : b m =
+    { go = fun k st ->
+      x.go (fun st' a -> (f a).go k st') st }
 
   (** A variant of [(>>=)] when the first argument returns [unit]. *)
-  let (<*>) (type a) (x:unit m) (y:a m) : a m = fun st ->
-    let open IStream in
-    concat_map begin fun stx ->
-      y stx
-    end (x st)
+  let (<*>) (type a) (x:unit m) (y:a m) : a m =
+    { go = fun k st ->
+      x.go (fun st' () -> y.go k st') st }
 
   (** Failure of the pattern-matching monad: no success. *)
-  let fail (type a) : a m = fun _ -> IStream.empty
+  let fail (type a) : a m = { go = fun _ _ -> IStream.empty }
 
-  let lift (type a) (x:a IStream.t) : a m = fun st ->
-    IStream.map begin fun x ->
-      { st with lhs = x }
-    end x
+  let lift (type a) (x:a IStream.t) : a m =
+    { go = fun k st ->
+       IStream.concat_map begin fun a ->
+         k st a
+       end x }
 
   let empty_state : unit t =
       { subst = empty_subst ;
@@ -191,15 +188,16 @@ module PatternMatching (E:StaticEnvironment) = struct
     lift (IStream.of_list l)
 
   (** Declares a subsitution, a context substitution and a term substitution. *)
-  let put subst context terms : unit m = fun { subst=substx; context=contextx; terms=termsx } ->
-    try
-      IStream.(cons {
-        subst = subst_prod substx subst ;
-        context = context_subst_prod contextx context ;
-        terms = term_subst_prod termsx terms ;
-        lhs = ()
-      } empty)
-    with Not_coherent_metas -> IStream.empty
+  let put subst context terms : unit m =
+    { go = fun k { subst=substx; context=contextx; terms=termsx } ->
+      try
+        k {
+          subst = subst_prod substx subst ;
+          context = context_subst_prod contextx context ;
+          terms = term_subst_prod termsx terms ;
+          lhs = ()
+        } ()
+      with Not_coherent_metas -> IStream.empty }
 
   (** Declares a substitution. *)
   let put_subst subst : unit m = put subst empty_context_subst empty_term_subst
@@ -335,7 +333,7 @@ let match_term env sigma term rules =
     let sigma = sigma
   end in
   let module M = PatternMatching(E) in
-  M.match_term term rules M.empty_state
+  M.(run (match_term term rules) empty_state)
 
 
 (** [match_goal env sigma hyps concl rules] matches the goal
@@ -349,4 +347,4 @@ let match_goal env sigma hyps concl rules =
     let sigma = sigma
   end in
   let module M = PatternMatching(E) in
-  M.match_goal hyps concl rules M.empty_state
+  M.(run (match_goal hyps concl rules) empty_state)
