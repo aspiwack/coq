@@ -91,7 +91,20 @@ end = struct
     nxt
   end
 
-  let concat_map f s = concat (map f s)
+  let concat_map f (S(s,nxt)) = S begin
+    (s,empty) ,
+    let rec nxt' (s,stream) =
+      match peek stream with
+      | IStream.Nil ->
+          begin match nxt s with
+          | IStream.Nil -> IStream.Nil
+          | IStream.Cons(a',s') -> nxt' (s',f a')
+          end
+      | IStream.Cons(x,tail) ->
+          IStream.Cons(x,(s,tail))
+    in
+    nxt'
+  end
 
   let of_list l = S begin
     l ,
