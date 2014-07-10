@@ -12,6 +12,98 @@
 open Names
 open Tacexpr
 
+module MiniStream : sig
+
+  (** Impredicative encoding of the co-algebraic definition of
+      streams. *)
+  type +_ t = S : 's * ('s -> ('a,'s) IStream.u) -> 'a t
+
+  val empty : 'a t
+
+  val singleton : 'a -> 'a t
+
+  val peek : 'a t -> ('a,'a t) IStream.u
+
+  val map : ('a->'b) -> 'a t -> 'b t
+
+  val map_filter : ('a->'b option) -> 'a t -> 'b t
+
+  val concat : 'a t t -> 'a t
+
+  val concat_map : ('a->'b t) -> 'a t -> 'b t
+
+  val of_list : 'a list -> 'a t
+
+  val to_istream : 'a t -> 'a IStream.t
+
+end = struct
+
+  type _ t = S : 's * ('s -> ('a,'s) IStream.u) -> 'a t
+
+  let empty = S (() , fun () -> IStream.Nil)
+
+  let singleton x = S begin
+    true ,
+    function true -> IStream.Cons(x,false) | false -> IStream.Nil
+  end
+
+  let peek (S(s,nxt)) =
+    let open IStream in
+    match nxt s with
+    | Nil -> Nil
+    | Cons(x,s') -> Cons(x,S(s',nxt))
+
+  let map f (S(s,nxt)) = S begin
+    s,
+    let open IStream in
+    fun s -> match nxt s with
+    | Nil -> Nil
+    | Cons(x,s') -> Cons(f x,s')
+  end
+
+  let map_filter f (S(s,nxt)) = S begin
+    s,
+    let open IStream in
+    let rec nxt' s =
+      match nxt s with
+      | Nil -> Nil
+      | Cons(x,s') ->
+          begin match f x with
+          | None -> nxt' s
+          | Some y -> Cons(y,s')
+          end
+    in
+    nxt'
+  end
+
+  let concat (S(s,nxt_stream)) = S begin
+    (s,empty) ,
+    let rec nxt (s,stream) =
+      match peek stream with
+      | IStream.Nil ->
+          begin match nxt_stream s with
+          | IStream.Nil -> IStream.Nil
+          | IStream.Cons(stream',s') -> nxt (s',stream')
+          end
+      | IStream.Cons(x,tail) ->
+          IStream.Cons(x,(s,tail))
+    in
+    nxt
+  end
+
+  let concat_map f s = concat (map f s)
+
+  let of_list l = S begin
+    l ,
+    function
+      | [] -> IStream.Nil
+      | a::l' -> IStream.Cons(a,l')
+  end
+
+  let to_istream (S(s,nxt)) = IStream.make nxt s
+
+end
+
 (** [t] is the type of matching successes. It ultimately contains a
     {!Tacexpr.glob_tactic_expr} representing the left-hand side of the
     corresponding matching rule, a matching substitution to be
@@ -119,10 +211,7 @@ module PatternMatching (E:StaticEnvironment) = struct
   (** To focus on the algorithmic portion of pattern-matching, the
       bookkeeping is relegated to a monad: the composition of the
       bactracking monad of {!IStream.t} with a "writer" effect. *)
-  (* spiwack: as we don't benefit from the various stream optimisations
-     of Haskell, it may be costly to give the monad in direct style such as
-     here. We may want to use some continuation passing style. *)
-  type 'a m = 'a t IStream.t
+  type 'a m = 'a t MiniStream.t
 
 
   (** The empty substitution. *)
@@ -159,14 +248,14 @@ module PatternMatching (E:StaticEnvironment) = struct
       terms = empty_term_subst ;
       lhs = lhs ; }
     in
-    IStream.(cons success empty)
+    MiniStream.(singleton success)
 
   (** Monadic bind: each success of [x] is replaced by the successes
       of [f x]. The substitutions of [x] and [f x] are composed,
       dropping the apparent successes when the substitutions are not
       coherent. *)
   let (>>=) (type a) (type b) (x:a m) (f:a -> b m) : b m =
-    let open IStream in
+    let open MiniStream in
     concat_map begin fun { subst=substx; context=contextx; terms=termsx; lhs=lhsx } ->
       map_filter begin fun { subst=substf; context=contextf; terms=termsf; lhs=lhsf } ->
         try
@@ -182,7 +271,7 @@ module PatternMatching (E:StaticEnvironment) = struct
 
   (** A variant of [(>>=)] when the first argument returns [unit]. *)
   let (<*>) (type a) (x:unit m) (y:a m) : a m =
-    let open IStream in
+    let open MiniStream in
     concat_map begin fun { subst=substx; context=contextx; terms=termsx; lhs=() } ->
       map_filter begin fun { subst=substy; context=contexty; terms=termsy; lhs=lhsy } ->
         try
@@ -197,20 +286,26 @@ module PatternMatching (E:StaticEnvironment) = struct
     end x
 
   (** Failure of the pattern-matching monad: no success. *)
-  let fail (type a) : a m = IStream.empty
+  let fail (type a) : a m = MiniStream.empty
 
   (** Chooses in a list, in the same order as the list *)
-  let pick (type a) (l:a list) : a m =
-    IStream.map begin fun x ->
-      { subst = empty_subst ;
-        context = empty_context_subst ;
-        terms = empty_term_subst ;
-        lhs = x }
-    end (IStream.of_list l)
+  let pick (type a) (l:a list) : a m = MiniStream.S begin
+    l ,
+    function
+      | [] -> IStream.Nil
+      | a::l' ->
+          let a' =
+            { subst = empty_subst ;
+              context = empty_context_subst ;
+              terms = empty_term_subst ;
+              lhs = a }
+          in
+          IStream.Cons(a',l')
+  end
 
   (** Declares a subsitution, a context substitution and a term substitution. *)
   let put subst context terms : unit m =
-    IStream.(cons { subst ; context ; terms ; lhs = () } empty)
+    MiniStream.(singleton { subst ; context ; terms ; lhs = () })
 
   (** Declares a substitution. *)
   let put_subst subst : unit m = put subst empty_context_subst empty_term_subst
@@ -244,12 +339,25 @@ module PatternMatching (E:StaticEnvironment) = struct
     | Subterm (with_app_context,id_ctxt,p) ->
         (* spiwack: this branch is easier in direct style, would need to be
            changed if the implementation of the monad changes. *)
-        IStream.map begin fun { ConstrMatching.m_sub ; m_ctx } ->
-          let subst = adjust m_sub in
-          let context = id_map_try_add id_ctxt m_ctx Id.Map.empty in
-          let terms = empty_term_subst in
-          { subst ; context ; terms ; lhs }
-        end (ConstrMatching.match_subterm_gen with_app_context p term)
+        MiniStream.S begin
+          ConstrMatching.match_subterm_gen with_app_context p term ,
+          fun s ->
+            match IStream.peek s with
+            | IStream.Nil -> IStream.Nil
+            | IStream.Cons({ ConstrMatching.m_sub ; m_ctx },s') ->
+                let subst = adjust m_sub in
+                let context = id_map_try_add id_ctxt m_ctx Id.Map.empty in
+                let terms = empty_term_subst in
+                let a' = { subst ; context ; terms ; lhs } in
+                IStream.Cons(a',s')
+        end
+          (* arnaud: nettoyer *)
+        (* MiniStream.map begin fun { ConstrMatching.m_sub ; m_ctx } -> *)
+        (*   let subst = adjust m_sub in *)
+        (*   let context = id_map_try_add id_ctxt m_ctx Id.Map.empty in *)
+        (*   let terms = empty_term_subst in *)
+        (*   { subst ; context ; terms ; lhs } *)
+        (* end (ConstrMatching.match_subterm_gen with_app_context p term) *)
 
 
   (** [rule_match_term term rule] matches the term [term] with the
@@ -264,7 +372,7 @@ module PatternMatching (E:StaticEnvironment) = struct
   (** [match_term term rules] matches the term [term] with the set of
       matching rules [rules].*)
   let match_term term rules =
-    IStream.(concat_map (fun r -> rule_match_term term r) (of_list rules))
+    MiniStream.(concat_map (fun r -> rule_match_term term r) (of_list rules))
 
 
 
@@ -332,7 +440,7 @@ module PatternMatching (E:StaticEnvironment) = struct
   (** [match_goal hyps concl rules] matches the goal [hyps|-concl]
       with the set of matching rules [rules]. *)
   let match_goal hyps concl rules =
-    IStream.(concat_map (fun r -> rule_match_goal hyps concl r) (of_list rules))
+    MiniStream.(concat_map (fun r -> rule_match_goal hyps concl r) (of_list rules))
 
 end
 
@@ -346,7 +454,7 @@ let match_term env sigma term rules =
     let sigma = sigma
   end in
   let module M = PatternMatching(E) in
-  M.match_term term rules
+  MiniStream.to_istream (M.match_term term rules)
 
 
 (** [match_goal env sigma hyps concl rules] matches the goal
@@ -360,4 +468,4 @@ let match_goal env sigma hyps concl rules =
     let sigma = sigma
   end in
   let module M = PatternMatching(E) in
-  M.match_goal hyps concl rules
+  MiniStream.to_istream (M.match_goal hyps concl rules)
