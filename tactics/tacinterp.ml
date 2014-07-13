@@ -1253,16 +1253,19 @@ and interp_match_successes lz ist s : typed_generic_argument GTac.t =
   let matching_failure =
     UserError ("Tacinterp.apply_match" , str "No matching clauses for match.")
   in
-  if lz then
-    (** lazymatch *)
-    let open IStream in
-    begin match peek s with
-    | Cons (s,_) -> interp_match_success ist s
-    | Nil -> Proofview.tclZERO matching_failure
-    end
-  else
-    (** match *)
-    Proofview.tclONCE (tclOR_stream s matching_failure)
+  match lz with
+  | Tacexpr.Lazy ->
+      (** lazymatch *)
+      let open IStream in
+      begin match peek s with
+      | Cons (s,_) -> interp_match_success ist s
+      | Nil -> Proofview.tclZERO matching_failure
+      end
+  | Tacexpr.LocalBacktracking ->
+      (** match *)
+      Proofview.tclONCE (tclOR_stream s matching_failure)
+  | Tacexpr.GeneralBacktracking ->
+      tclOR_stream s matching_failure
 
 
 (* Interprets the Match expressions *)

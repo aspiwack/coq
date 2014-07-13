@@ -299,6 +299,13 @@ let mlexpr_of_debug = function
   | Tacexpr.Debug -> <:expr< Tacexpr.Debug >>
   | Tacexpr.Info -> <:expr< Tacexpr.Info >>
 
+
+let mlexpr_of_lazy_flag = function
+  | Tacexpr.Lazy -> <:expr< Tacexpr.Lazy >>
+  | Tacexpr.LocalBacktracking -> <:expr< Tacexpr.LocalBacktracking >>
+  | Tacexpr.GeneralBacktracking -> <:expr< Tacexpr.GeneralBacktracking >>
+
+
 let rec mlexpr_of_atomic_tactic = function
   (* Basic tactics *)
   | Tacexpr.TacIntroPattern pl ->
@@ -469,12 +476,12 @@ and mlexpr_of_tactic : (Tacexpr.raw_tactic_expr -> MLast.expr) = function
       <:expr< Tacexpr.TacLetIn $mlexpr_of_bool isrec$ $mlexpr_of_list f l$ $mlexpr_of_tactic t$ >>
   | Tacexpr.TacMatch (lz,t,l) ->
       <:expr< Tacexpr.TacMatch
-        $mlexpr_of_bool lz$
+        $mlexpr_of_lazy_flag lz$
         $mlexpr_of_tactic t$
         $mlexpr_of_list (mlexpr_of_match_rule mlexpr_of_tactic) l$>>
   | Tacexpr.TacMatchGoal (lz,lr,l) ->
       <:expr< Tacexpr.TacMatchGoal
-        $mlexpr_of_bool lz$
+        $mlexpr_of_lazy_flag lz$
         $mlexpr_of_bool lr$
         $mlexpr_of_list (mlexpr_of_match_rule mlexpr_of_tactic) l$>>
 

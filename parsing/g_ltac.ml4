@@ -159,7 +159,9 @@ GEXTEND Gram
       | "()" -> TacGeneric (genarg_of_unit ()) ] ]
   ;
   match_key:
-    [ [ "match" -> false | "lazymatch" -> true ] ]
+    [ [ "match" -> Tacexpr.LocalBacktracking 
+      | "lazymatch" -> Tacexpr.Lazy
+      | "bmatch" -> Tacexpr.GeneralBacktracking ] ]
   ;
   input_fun:
     [ [ "_" -> None

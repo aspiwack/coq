@@ -446,7 +446,10 @@ let pr_induction_kind = function
   | FullInversion -> str "inversion"
   | FullInversionClear -> str "inversion_clear"
 
-let pr_lazy lz = if lz then str "lazy" else mt ()
+let pr_lazy = function
+  | Tacexpr.Lazy -> str"lazy"
+  | Tacexpr.LocalBacktracking -> mt ()
+  | Tacexpr.GeneralBacktracking -> str"b"
 
 let pr_match_pattern pr_pat = function
   | Term a -> pr_pat a
