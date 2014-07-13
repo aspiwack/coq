@@ -69,7 +69,7 @@ end = struct
       | Nil -> Nil
       | Cons(x,s') ->
           begin match f x with
-          | None -> nxt' s
+          | None -> nxt' s'
           | Some y -> Cons(y,s')
           end
     in
