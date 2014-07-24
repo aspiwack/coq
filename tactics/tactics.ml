@@ -1345,6 +1345,17 @@ let keep hyps gl =
 (* Introduction tactics *)
 (************************)
 
+(** Applies [c] to as many evars as necessary to eliminate arrows the
+    type [t] (without reduction). Returns a refinable term as per
+    [Proofview.Refine]. *)
+let rec apply_with_evars env c t h =
+  match Term.kind_of_term t with
+  | Prod (_,a,b) ->
+      let (h,arg) = Proofview.Refine.new_evar h env a in
+      let b' = Vars.subst1 arg b in
+      apply_with_evars env (Term.mkApp ( c , [|arg|] )) b' h
+  | _ -> (h,c)
+
 let check_number_of_constructors expctdnumopt i nconstr =
   if Int.equal i 0 then error "The constructors are numbered starting from 1.";
   begin match expctdnumopt with
@@ -1355,6 +1366,17 @@ let check_number_of_constructors expctdnumopt i nconstr =
   end;
   if i > nconstr then error "Not enough constructors."
 
+(** Applies the [i]-th constructor of [ind] to as many evars as its
+    arity commands. If [expectdnumopt] is [Some n], then fails if [ind]
+    does not have exactly [n] constructors (used for tactics such as
+    [split], and [left] and [right]). *)
+let apply_constructor_with_evars env ind expctdnumopt i h =
+  let arities = Inductiveops.arities_of_constructors env ind in
+  let () = check_number_of_constructors expctdnumopt i (Array.length arities) in
+  let arity = arities.(i-1) in
+  let (h,pconstruct) = Proofview.Refine.fresh_constructor_instance h env (fst ind,i) in
+  apply_with_evars env (Term.mkConstructU pconstruct) arity h
+
 let constructor_tac with_evars expctdnumopt i lbind =
   Proofview.Goal.raw_enter begin fun gl ->
     let cl = Tacmach.New.pf_nf_concl gl in
@@ -1362,17 +1384,17 @@ let constructor_tac with_evars expctdnumopt i lbind =
       Tacmach.New.pf_apply Tacred.reduce_to_quantified_ind gl
     in
     let (mind,redcl) = reduce_to_quantified_ind cl in
-    let nconstr =
-      Array.length (snd (Global.lookup_inductive (fst mind))).mind_consnames in
-      check_number_of_constructors expctdnumopt i nconstr;
-
-      let sigma, cons = Evd.fresh_constructor_instance
-	(Proofview.Goal.env gl) (Proofview.Goal.sigma gl) (fst mind, i) in
-      let cons = mkConstructU cons in
-	
-      let apply_tac = Proofview.V82.tactic (general_apply true false with_evars (dloc,(cons,lbind))) in
+    let torefine env h = apply_constructor_with_evars env mind expctdnumopt i h in
+    let apply_tac =
+      Proofview.Goal.raw_enter begin fun gl ->
+        (* delays the choice of environment to be allowed to used
+           introduced variables. *)
+        let env = Proofview.Goal.env gl in
+        Proofview.Refine.refine_casted (fun h -> torefine env h)
+      end
+    in
 	(Tacticals.New.tclTHENLIST
-           [Proofview.V82.tclEVARS sigma; Proofview.V82.tactic (convert_concl_no_check redcl DEFAULTcast); intros; apply_tac])
+           [Proofview.V82.tactic (convert_concl_no_check redcl DEFAULTcast); intros; apply_tac])
   end
 
 let one_constructor i lbind = constructor_tac false None i lbind
