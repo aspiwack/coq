@@ -167,7 +167,7 @@ and e_my_find_search db_list local_db hdc complete concl =
     fun (flags, {pri = b; pat = p; poly = poly; code = t; name = name}) ->
       let tac =
 	match t with
-	  | Res_pf (term,cl) -> with_prods nprods poly (term,cl) (unify_resolve poly flags)
+	  | Res_pf (term,cl)
 	  | ERes_pf (term,cl) -> with_prods nprods poly (term,cl) (unify_e_resolve poly flags)
 	  | Give_exact c -> e_give_exact flags poly c
 	  | Res_pf_THEN_trivial_fail (term,cl) ->
