@@ -778,8 +778,8 @@ let interp_message_token ist = function
 let interp_message_nl ist l =
   let open Ftactic in
   Ftactic.List.map (interp_message_token ist) l >>= function
-  | [] -> Ftactic.return (mt ())
-  | l -> Ftactic.return (prlist_with_sep spc (fun x -> x) l ++ fnl ())
+  | [] -> Ftactic.return (mt (),false)
+  | l -> Ftactic.return (prlist_with_sep spc (fun x -> x) l,true)
 
 let interp_message ist l =
   let open Ftactic in
@@ -1070,11 +1070,17 @@ and eval_tactic ist tac : unit Proofview.tactic = match tac with
       (** Optimization *)
       Proofview.tclLIFT (db_breakpoint (curr_debug ist) [])
   | TacId s ->
-      let msg = interp_message_nl ist s in
-      let tac l = Proofview.tclLIFT (Proofview.NonLogical.print (hov 0 l)) in
-      Proofview.tclTHEN
-        (Ftactic.run msg tac)
-        (Proofview.tclLIFT (db_breakpoint (curr_debug ist) s))
+      let msgnl = interp_message_nl ist s in
+      let endline = function true -> Pp.fnl () | false -> mt () in
+      let print (l,nl) = Proofview.tclLIFT (Proofview.NonLogical.print (hov 0 l++endline nl)) in
+      let log (l,_) =
+        if List.is_empty s then Proofview.tclUNIT ()
+        else Proofview.Trace.log (fun () -> l)
+      in
+      let break = Proofview.tclLIFT (db_breakpoint (curr_debug ist) s) in
+      Ftactic.run msgnl begin fun msgnl ->
+        print msgnl <*> log msgnl <*> break
+      end
   | TacFail (n,s) ->
       let msg = interp_message ist s in
       let tac l = Proofview.V82.tactic (fun gl -> tclFAIL (interp_int_or_var ist n) l gl) in
