@@ -318,7 +318,7 @@ let initial_goals p = Proofview.initial_goals p.entry
 
 let run_tactic env tac pr =
   let sp = pr.proofview in
-  let (_,tacticced_proofview,(status,to_shelve,give_up),_) = Proofview.apply env tac sp in
+  let (_,tacticced_proofview,(status,to_shelve,give_up),info_trace) = Proofview.apply env tac sp in
   let shelf =
     let sigma = Proofview.return tacticced_proofview in
     let pre_shelf = pr.shelf@(List.rev (Evd.future_goals sigma))@to_shelve in
@@ -327,6 +327,8 @@ let run_tactic env tac pr =
   in
   let given_up = pr.given_up@give_up in
   let proofview = Proofview.Unsafe.reset_future_goals tacticced_proofview in
+  (* arnaud: debugging *)
+  let () = Pp.ppnl (Proofview.Trace.pr_info info_trace) in
   { pr with proofview ; shelf ; given_up },status
 
 (*** Commands ***)
