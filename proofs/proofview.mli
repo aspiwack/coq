@@ -427,7 +427,7 @@ module Refine : sig
   type handle
   (** A handle to thread along in state-passing style. *)
 
-  val new_evar : handle -> Environ.env -> Constr.types -> handle * Constr.t
+  val new_evar : handle -> Environ.env -> ?store:Evd.Store.t -> Constr.types -> handle * Constr.t
   (** Create a new hole that will be added to the goals to solve. *)
 
   val fresh_constructor_instance :

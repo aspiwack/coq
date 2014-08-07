@@ -953,9 +953,9 @@ module Refine =
 struct
   type handle = Evd.evar_map * goal list
 
-  let new_evar (evd, evs) env typ =
+  let new_evar (evd, evs) env ?store typ =
     let src = (Loc.ghost, Evar_kinds.GoalEvar) in
-    let (evd, ev) = Evarutil.new_evar evd env ~src typ in
+    let (evd, ev) = Evarutil.new_evar evd env ~src ?store typ in
     let evd = Typeclasses.mark_unresolvables 
       ~filter:(fun ev' _ -> Evar.equal (fst (Term.destEvar ev)) ev') evd in
     let (evk, _) = Term.destEvar ev in
