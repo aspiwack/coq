@@ -1675,24 +1675,38 @@ let check_number_of_constructors expctdnumopt i nconstr =
   end;
   if i > nconstr then error "Not enough constructors."
 
+(** [constructor_tac_gen apply expctdnumopt i lbind] applies the [i]th
+    constructor of the inductive at the head of the current goal
+    conclusion using the tactic [apply]. [lbind] is a binding list which
+    is used by apply to fill in holes. If [expctdnumopt] is [Some n] then
+    the tactic fails if the inductive does not have exactly [n]
+    constructors (used by tactics such as [split], [left] and [right]). *)
+let constructor_tac_gen apply gl expctdnumopt i lbind =
+  let cl = Tacmach.New.pf_nf_concl gl in
+  let env = Proofview.Goal.env gl in
+  let sigma = Proofview.Goal.sigma gl in
+  let (mind,redcl) = Tacmach.New.pf_apply Tacred.reduce_to_quantified_ind gl cl in
+  let arities = Inductiveops.arities_of_constructors env mind in
+  let () = check_number_of_constructors expctdnumopt i (Array.length arities) in
+  let arity = arities.(i-1) in
+  let (sigma,pconstruct) = Evd.fresh_constructor_instance env sigma (fst mind,i) in
+  let construct = Term.mkConstructU pconstruct in
+  Tacticals.New.tclTHENLIST [
+    Proofview.V82.tclEVARS sigma;
+    Proofview.V82.tactic (convert_concl_no_check redcl DEFAULTcast);
+    intros;
+    Proofview.Goal.raw_enter (fun gl -> apply gl construct arity lbind);
+  ]
+
+let full_constructor_tac expctdnumopt i lbind =
+  Proofview.Goal.raw_enter begin fun gl ->
+    constructor_tac_gen full_apply_arity gl expctdnumopt i lbind
+  end
+
 let constructor_tac with_evars expctdnumopt i lbind =
   Proofview.Goal.raw_enter begin fun gl ->
-    let cl = Tacmach.New.pf_nf_concl gl in
-    let reduce_to_quantified_ind =
-      Tacmach.New.pf_apply Tacred.reduce_to_quantified_ind gl
-    in
-    let (mind,redcl) = reduce_to_quantified_ind cl in
-    let nconstr =
-      Array.length (snd (Global.lookup_inductive (fst mind))).mind_consnames in
-      check_number_of_constructors expctdnumopt i nconstr;
-
-      let sigma, cons = Evd.fresh_constructor_instance
-	(Proofview.Goal.env gl) (Proofview.Goal.sigma gl) (fst mind, i) in
-      let cons = mkConstructU cons in
-	
-      let apply_tac = Proofview.V82.tactic (general_apply true false with_evars None (dloc,(cons,lbind))) in
-	(Tacticals.New.tclTHENLIST
-           [Proofview.V82.tclEVARS sigma; Proofview.V82.tactic (convert_concl_no_check redcl DEFAULTcast); intros; apply_tac])
+    let apply = if with_evars then eapply_arity else apply_arity in
+    constructor_tac_gen apply gl expctdnumopt i lbind
   end
 
 let one_constructor i lbind = constructor_tac false None i lbind
