@@ -273,6 +273,12 @@ val shelve_unifiable : unit tactic
 val unshelve : Goal.goal list -> proofview -> proofview
 
 
+(* [guard_no_unifiable e] fails with [e l sigma env] if [l] is the
+   non-empty list of the unifiable subgoals ([sigma] and [env] are the
+   current [evar_map] and [env] respectively). Behaves like [tclUNIT
+   ()] otherwise. *)
+val guard_no_unifiable : (Goal.goal list -> Environ.env -> Evd.evar_map -> exn) -> unit tactic
+
 (* Gives up on the goal under focus. Reports an unsafe status. Proofs
    with given up goals cannot be closed. *)
 val give_up : unit tactic

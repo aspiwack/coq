@@ -649,6 +649,19 @@ let shelve_unifiable =
 let unshelve l p =
   { p with comb = p.comb@l }
 
+(* [guard_no_unifiable e] fails with [e l sigma env] if [l] is the
+   non-empty list of the unifiable subgoals ([sigma] and [env] are the
+   current [evar_map] and [env] respectively). Behaves like [tclUNIT
+   ()] otherwise. *)
+let guard_no_unifiable e =
+  (* spiwack: convenience notations, waiting for ocaml 3.12 *)
+  let (>>=) = Proof.bind in
+  Proof.get >>= fun {solution;comb} ->
+  Proof.current >>= fun env ->
+  let (unif,_) = Goal.partition_unifiable solution comb in
+  if List.is_empty unif then tclUNIT ()
+  else tclZERO (e unif env solution)
+
 (* Gives up on the goal under focus. Reports an unsafe status. Proofs
    with given up goals cannot be closed. *)
 let give_up =
