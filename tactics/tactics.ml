@@ -1464,6 +1464,207 @@ let keep hyps gl =
 (* Introduction tactics *)
 (************************)
 
+(** Recording the name bound by the forall which is eliminated by an
+    evar. For error messages. *)
+let evar_name : Names.Name.t Evd.Store.field = Evd.Store.field ()
+
+let new_evar_with_name h name env a =
+  let store = Evd.Store.(set empty evar_name name) in
+  Proofview.Refine.new_evar h ~store env a
+
+let cannot_find_instance l env0 sigma0 =
+  let rec extract_name g =
+    let ({ evar_extra },_) = Goal.(eval info env0 sigma0 g) in
+    Option.default Anonymous (Evd.Store.get evar_extra evar_name)
+  in
+  Logic.(RefinerError (UnresolvedBindings (List.map extract_name l)))
+
+(** [true] if [c] contains [Rel 1] *)
+let dependent_rel1 c =
+  let rec dependent_rel1 depth c =
+    match kind_of_term c with
+    | Rel n when Int.equal n depth -> raise Exit
+    | _ -> iter_constr_with_binders succ dependent_rel1 depth c
+  in
+  try dependent_rel1 1 c ; false
+  with Exit -> true
+
+(** [true] if the "conclusion" of [c] (that is the right-hand of the
+    rightmost product of [c]) contains [Rel 1] *)
+let dependent_concl_rel1 c =
+  let rec dependent_concl_rel1 depth c =
+    match kind_of_term c with
+    | Rel n when Int.equal n depth -> raise Exit
+    | Prod(_,_,b) -> dependent_concl_rel1 (succ depth) b
+    | _ -> iter_constr_with_binders succ dependent_concl_rel1 depth c
+  in
+  try dependent_concl_rel1 1 c ; false
+  with Exit -> true
+
+(** Applies [c] to as many evars as necessary to eliminate arrows and
+    foralls of the type [t] (without reduction). Returns a refinable
+    term as per [Proofview.Refine]. *)
+let rec apply_term_to_evars env c t h =
+  (* arnaud: il faut utiliser un kind_of_term up-to evars. *)
+  match Term.kind_of_term t with
+  | Prod (x,a,b) ->
+      let (h,arg) = new_evar_with_name h x env a in
+      let b' = Vars.subst1 arg b in
+      apply_term_to_evars env (Term.mkApp ( c , [|arg|] )) b' h
+  | _ -> (h,c)
+
+(** Variant of {!apply_term_to_evars} which takes a list [b] of terms,
+    which replace evars for the argument which are dependent in [t]
+    but not bound in the conclusion of [t]. Raises a user error if
+    there are not exactly [List.length b] such dependent arguments. *)
+let apply_term_to_evars_with_implicit_bindings env c t bd h =
+  (** Predicate to test if the variable [Rel1] is one for which the binding stand *)
+  let unknown b = dependent_rel1 b && not (dependent_concl_rel1 b) in
+  (** Used to display an error message. *)
+  let rec count_unknown t =
+    match kind_of_term t with
+    | Prod(_,_,b) ->
+        if unknown b then 1+count_unknown b
+        else count_unknown b
+    | _ -> 0
+  in
+  (** Error raised to signal that the number of specified argument is
+      incorrect*)
+  let error_bindings () =
+    let error_not_right_number_missing_arguments n =
+      errorlabstrm ""
+        (strbrk "Not the right number of missing arguments (expected " ++
+           int n ++ str ").")
+    in
+    error_not_right_number_missing_arguments (count_unknown t)
+  in
+  (** Main loop *)
+  let rec apply_term_to_evars_with_implicit_bindings env c t bd h =
+    match kind_of_term t with
+    | Prod(_,a,b) when unknown b ->
+        begin match bd with
+        | arg::bd ->
+            let (h,arg) = Proofview.Refine.with_type h env arg a in
+            apply_term_to_arg env c b arg bd h
+        | [] -> error_bindings ()
+        end
+    | Prod(x,a,b)  ->
+        let (h,arg) = new_evar_with_name h x env a in
+        apply_term_to_arg env c b arg bd h
+    | _ -> bd , (h,c)
+  and apply_term_to_arg env c b arg bd h =
+    let b' = Vars.subst1 arg b in
+    apply_term_to_evars_with_implicit_bindings env (Term.mkApp ( c , [|arg|] )) b' bd h
+  in
+  let (bd',hc) = apply_term_to_evars_with_implicit_bindings env c t bd h in
+  if List.is_empty bd' then hc
+  else error_bindings ()
+
+(** Variant of {!apply_term_to_evars} which takes a list [b] of
+    bindings, those of the form [(x:=t)] are used instead of an evar
+    when instantiated a dependent [forall x,...] (with the same
+    [x]). The bindings of the form [(n:=t)] for some natural number
+    [n], are used for the [n]-th non-dependent application. Raises a
+    user-error if some bindings are left. *)
+let apply_term_to_evars_with_explicit_bindings env c t b h =
+  (** Returns and removes a binding for a given*)
+  let rec extract (h:quantified_hypothesis) = function
+    | (_,b,t)::l when b = h -> Some (t,l)
+    | bd::l -> Option.map (fun (t,l) -> t , bd::l) (extract h l)
+    | [] -> None
+  in
+  (** search next argument in [bd] dependending on whether [b] is the
+      body of a dependent product or a non-dependent implication. *)
+  let of_binding x b i bd =
+    if dependent_rel1 b then
+      match x with
+      | Anonymous -> i , None
+      | Name x -> i , extract (NamedHyp x) bd
+    else
+      i+1 , extract (AnonHyp i) bd
+  in
+  (** If no binding is found, make an evar instead. *)
+  let of_binding_or_evar env x a b i bd h =
+    match of_binding x b i bd with
+    | (i',Some (arg,bd')) ->
+        let (h',arg) = Proofview.Refine.with_type h env arg a in
+        (h',arg,i',bd')
+    | (i',None) ->
+        let (h,arg) = new_evar_with_name h x env a in
+        (h,arg,i',bd)
+  in
+  (** Main loop. [i-1] is the number of non-dependent implications
+      already visited. *)
+  let rec apply_term_to_evars_with_explicit_bindings env c t i bd h =
+    match Term.kind_of_term t with
+    | Prod (x,a,b) ->
+        let (h,arg,i',bd') = of_binding_or_evar env x a b i bd h in
+        let b' = Vars.subst1 arg b in
+        apply_term_to_evars_with_explicit_bindings env (Term.mkApp ( c , [|arg|] )) b' i' bd' h
+    | _ -> bd , (h,c)
+  in
+  (* arnaud: v'erifier que la liste des binding est bien form'ee (cf check_bindings dans clenv.ml). *)
+  (* The bound variables are renamed to match the display (for
+     instance of [Check t]), so that named bindings correspond to a
+     unique bound variables. And so that there are no clash with
+     hypotheses. *)
+  (* spiwack: though I would argue that in the case that [t] comes directly from
+     a global declaration, this may be a bit surprising. *)
+  let t = Namegen.rename_bound_vars_as_displayed [] [] t in
+  let (b,hc) = apply_term_to_evars_with_explicit_bindings env c t 1 b h in
+  if List.is_empty b then hc
+  else
+    let format_one_binding = function
+      | (_,NamedHyp x,_) -> Pp.(h 0 (str"No such bound variable"++spc()++pr_id x))
+      | (_,AnonHyp n,_) ->
+          Pp.(h 0 (str"Fewer than"++spc()++int n++spc()++str"non-dependent implications"))
+    in
+    let format_bindings =
+      Pp.v 0 (Pp.prlist format_one_binding b)
+    in
+    let err =
+      Pp.(str"Incorrect binding specification:"++format_bindings)
+    in
+    Errors.errorlabstrm "apply_term_to_evars" err
+
+(** Dispatches over the kind of bindings *)
+let apply_term_to_evars_with_bindings env c t b h =
+  match b with
+  | NoBindings -> apply_term_to_evars env c t h
+  | ImplicitBindings b -> apply_term_to_evars_with_implicit_bindings env c t b h
+  | ExplicitBindings b -> apply_term_to_evars_with_explicit_bindings env c t b h
+
+(** reduction applied at the end of an application. *)
+let apply_red_flags =
+  Genredexpr.Lazy {
+    Genredexpr.rBeta=true;
+    rIota=false;
+    rZeta=false;
+    rDelta=false;
+    rConst=[];
+  }
+let apply_locs = { Locus.onhyps=None; concl_occs=Locus.AllOccurrences }
+
+(** [t] is assumed to be a type of [c]. [apply_arity_gen endtac gl c t
+    bindings] applies [c] in the goal by applying [c] with the number of
+    arguments specified by the arity [t] (which is considered without any
+    conversion). The arguments are either taken from the [bindings] or
+    holes. The goal is then refined with the applied term. *)
+let apply_arity_gen endtac gl c t bindings =
+  (* everything is up to existential here. *)
+  let gl = Proofview.Goal.assume gl in
+  let env = Proofview.Goal.env gl in
+  let to_refine h = apply_term_to_evars_with_bindings env c t bindings h in
+  let open Proofview.Notations in
+  Proofview.Refine.refine_casted to_refine <*>
+  endtac <*>
+  Proofview.V82.tactic (reduce apply_red_flags apply_locs)
+
+let full_apply_arity gl c t b = apply_arity_gen (Proofview.tclUNIT ()) gl c t b
+let eapply_arity gl c t b = apply_arity_gen (Proofview.shelve_unifiable) gl c t b
+let apply_arity gl c t b =
+  apply_arity_gen (Proofview.guard_no_unifiable cannot_find_instance) gl c t b
+
 let check_number_of_constructors expctdnumopt i nconstr =
   if Int.equal i 0 then error "The constructors are numbered starting from 1.";
   begin match expctdnumopt with
