@@ -59,11 +59,32 @@ let explicitation_eq ex1 ex2 = match ex1, ex2 with
 
 let eq_located f (_, x) (_, y) = f x y
 
+module type Equalizer = sig
+
+  val binder_eq : Names.Id.t -> Names.Id.t -> bool
+
+  val var_eq : Names.Id.t -> Names.Id.t -> bool
+
+end
+
+module Eq (E:Equalizer) = struct
+
+let name_eq n1 n2 =
+  match n1,n2 with
+  | Anonymous,Anonymous -> true
+  | Name id1,Name id2 -> E.binder_eq id1 id2
+  | _ -> true
+
+let eq_reference r1 r2 = match r1, r2 with
+| Qualid (_, q1), Qualid (_, q2) -> qualid_eq q1 q2
+| Ident (_, id1), Ident (_, id2) -> E.var_eq id1 id2
+| _ -> false
+
 let rec cases_pattern_expr_eq p1 p2 =
   if p1 == p2 then true
   else match p1, p2 with
   | CPatAlias(_,a1,i1), CPatAlias(_,a2,i2) ->
-      Id.equal i1 i2 && cases_pattern_expr_eq a1 a2
+      E.binder_eq i1 i2 && cases_pattern_expr_eq a1 a2
   | CPatCstr(_,c1,a1,b1), CPatCstr(_,c2,a2,b2) ->
       eq_reference c1 c2 &&
       List.equal cases_pattern_expr_eq a1 a2 &&
@@ -102,10 +123,10 @@ let rec constr_expr_eq e1 e2 =
   else match e1, e2 with
   | CRef (r1,u1), CRef (r2,u2) -> eq_reference r1 r2 && eq_universes u1 u2
   | CFix(_,id1,fl1), CFix(_,id2,fl2) ->
-      eq_located Id.equal id1 id2 &&
+      eq_located E.binder_eq id1 id2 &&
       List.equal fix_expr_eq fl1 fl2
   | CCoFix(_,id1,fl1), CCoFix(_,id2,fl2) ->
-      eq_located Id.equal id1 id2 &&
+      eq_located E.binder_eq id1 id2 &&
       List.equal cofix_expr_eq fl1 fl2
   | CProdN(_,bl1,a1), CProdN(_,bl2,a2) ->
       List.equal binder_expr_eq bl1 bl2 &&
@@ -114,7 +135,7 @@ let rec constr_expr_eq e1 e2 =
       List.equal binder_expr_eq bl1 bl2 &&
       constr_expr_eq a1 a2
   | CLetIn(_,(_,na1),a1,b1), CLetIn(_,(_,na2),a2,b2) ->
-      Name.equal na1 na2 &&
+      name_eq na1 na2 &&
       constr_expr_eq a1 a2 &&
       constr_expr_eq b1 b2
   | CAppExpl(_,(proj1,r1,_),al1), CAppExpl(_,(proj2,r2,_),al2) ->
@@ -137,20 +158,20 @@ let rec constr_expr_eq e1 e2 =
       List.equal case_expr_eq a1 a2 &&
       List.equal branch_expr_eq brl1 brl2
   | CLetTuple (_, n1, (m1, e1), t1, b1), CLetTuple (_, n2, (m2, e2), t2, b2) ->
-    List.equal (eq_located Name.equal) n1 n2 &&
-    Option.equal (eq_located Name.equal) m1 m2 &&
+    List.equal (eq_located name_eq) n1 n2 &&
+    Option.equal (eq_located name_eq) m1 m2 &&
     Option.equal constr_expr_eq e1 e2 &&
     constr_expr_eq t1 t2 &&
     constr_expr_eq b1 b2
   | CIf (_, e1, (n1, r1), t1, f1), CIf (_, e2, (n2, r2), t2, f2) ->
     constr_expr_eq e1 e2 &&
-    Option.equal (eq_located Name.equal) n1 n2 &&
+    Option.equal (eq_located name_eq) n1 n2 &&
     Option.equal constr_expr_eq r1 r2 &&
     constr_expr_eq t1 t2 &&
     constr_expr_eq f1 f2
   | CHole _, CHole _ -> true
   | CPatVar(_,(b1, i1)), CPatVar(_,(b2, i2)) ->
-    (b1 : bool) == b2 && Id.equal i1 i2
+    (b1 : bool) == b2 && E.binder_eq i1 i2
   | CEvar (_, ev1, c1), CEvar (_, ev2, c2) ->
     Evar.equal ev1 ev2 &&
     Option.equal (List.equal constr_expr_eq) c1 c2
@@ -181,7 +202,7 @@ and args_eq (a1,e1) (a2,e2) =
 
 and case_expr_eq (e1, (n1, p1)) (e2, (n2, p2)) =
   constr_expr_eq e1 e2 &&
-  Option.equal (eq_located Name.equal) n1 n2 &&
+  Option.equal (eq_located name_eq) n1 n2 &&
   Option.equal cases_pattern_expr_eq p1 p2
 
 and branch_expr_eq (_, p1, e1) (_, p2, e2) =
@@ -190,18 +211,18 @@ and branch_expr_eq (_, p1, e1) (_, p2, e2) =
 
 and binder_expr_eq ((n1, _, e1) : binder_expr) (n2, _, e2) =
   (** Don't care about the [binder_kind] *)
-  List.equal (eq_located Name.equal) n1 n2 && constr_expr_eq e1 e2
+  List.equal (eq_located name_eq) n1 n2 && constr_expr_eq e1 e2
 
 and fix_expr_eq (id1,(j1, r1),bl1,a1,b1) (id2,(j2, r2),bl2,a2,b2) =
-  (eq_located Id.equal id1 id2) &&
-  Option.equal (eq_located Id.equal) j1 j2 &&
+  (eq_located E.binder_eq id1 id2) &&
+  Option.equal (eq_located E.binder_eq) j1 j2 &&
   recursion_order_expr_eq r1 r2 &&
   List.equal local_binder_eq bl1 bl2 &&
   constr_expr_eq a1 a2 &&
   constr_expr_eq b1 b2
 
 and cofix_expr_eq (id1,bl1,a1,b1) (id2,bl2,a2,b2) =
-  (eq_located Id.equal id1 id2) &&
+  (eq_located E.binder_eq id1 id2) &&
   List.equal local_binder_eq bl1 bl2 &&
   constr_expr_eq a1 a2 &&
   constr_expr_eq b1 b2
@@ -215,16 +236,112 @@ and recursion_order_expr_eq r1 r2 = match r1, r2 with
 
 and local_binder_eq l1 l2 = match l1, l2 with
 | LocalRawDef (n1, e1), LocalRawDef (n2, e2) ->
-  eq_located Name.equal n1 n2 && constr_expr_eq e1 e2
+  eq_located name_eq n1 n2 && constr_expr_eq e1 e2
 | LocalRawAssum (n1, _, e1), LocalRawAssum (n2, _, e2) ->
   (** Don't care about the [binder_kind] *)
-  List.equal (eq_located Name.equal) n1 n2 && constr_expr_eq e1 e2
+  List.equal (eq_located name_eq) n1 n2 && constr_expr_eq e1 e2
 | _ -> false
 
 and constr_notation_substitution_eq (e1, el1, bl1) (e2, el2, bl2) =
   List.equal constr_expr_eq e1 e2 &&
   List.equal (List.equal constr_expr_eq) el1 el2 &&
   List.equal (List.equal local_binder_eq) bl1 bl2
+
+
+end
+
+module SyntacticEqualizer : Equalizer = struct
+
+  let binder_eq = Names.Id.equal
+  let var_eq = Names.Id.equal
+
+end
+
+include Eq(SyntacticEqualizer)
+
+(** permutations *)
+type permutation = Id.t Id.Map.t
+
+let emptyperm = Id.Map.empty
+
+let perm_apply p id =
+  try Id.Map.find id p
+  with Not_found -> id
+
+(** Composes [p] with the permutation [(p x,p y)]. *)
+let perm_extend p x y =
+  let px = perm_apply p x in
+  let py = perm_apply p y in
+  Id.Map.add x py (Id.Map.add y px p)
+
+
+(* arnaud: copi'e de nameops.ml, pour eviter des probl`emes de d'ependences *)
+let lift_subscript id =
+  let id = Id.to_string id in
+  let len = String.length id in
+  let rec add carrypos =
+    let c = id.[carrypos] in
+    if is_digit c then
+      if Int.equal (Char.code c) (Char.code '9') then begin
+	assert (carrypos>0);
+	add (carrypos-1)
+      end
+      else begin
+	let newid = String.copy id in
+	String.fill newid (carrypos+1) (len-1-carrypos) '0';
+	newid.[carrypos] <- Char.chr (Char.code c + 1);
+	newid
+      end
+    else begin
+      let newid = id^"0" in
+      if carrypos < len-1 then begin
+	String.fill newid (carrypos+1) (len-1-carrypos) '0';
+	newid.[carrypos+1] <- '1'
+      end;
+      newid
+    end
+  in Id.of_string (add (len-1))
+
+
+(* arnaud: copi'e de namegen.ml, pour eviter des histoires de dependences *)
+let next_ident_away_from id bad =
+  let rec name_rec id = if bad id then name_rec (lift_subscript id) else id in
+  name_rec id
+
+
+
+let constr_expr_alpha c =
+  (* HACK!!: [lastid] is a identifier which cannot exist, ensuring in
+     an awful way that we don't need to collect all the identifier in
+     [c] to initialise the freshness condition. *)
+  let lastid = ref (Id.of_string " ") in
+  let usedids = ref Id.Set.empty in
+  let leftperm = ref emptyperm in
+  let rightperm = ref emptyperm in
+  let fresh () =
+    let newid = next_ident_away_from !lastid (fun id -> Names.Id.Set.mem id !usedids) in
+    lastid := newid;
+    usedids := Id.Set.add newid !usedids;
+    newid
+  in
+  let module NominalEqualizer : Equalizer = struct
+
+    let binder_eq x y =
+      let z = fresh () in
+      let x' = perm_apply !leftperm x in
+      let y' = perm_apply !rightperm y in
+      leftperm := perm_extend !leftperm x' z;
+      rightperm := perm_extend !rightperm y' z;
+      true
+
+    let var_eq x y =
+      Id.equal
+        (perm_apply !leftperm x)
+        (perm_apply !rightperm y)
+   end in
+   let module Alpha = Eq(NominalEqualizer) in
+   Alpha.constr_expr_eq c
+
 
 let constr_loc = function
   | CRef (Ident (loc,_),_) -> loc
