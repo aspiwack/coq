@@ -2076,8 +2076,11 @@ and interp_atomic ist tac : unit Proofview.tactic =
               sigma , Some c_interp
         in
         let dqhyps = interp_declared_or_quantified_hypothesis ist env sigma hyp in
-        let sigma,ids = interp_or_and_intro_pattern_option ist env sigma ids in
-        Proofview.Unsafe.tclEVARS sigma <*> Inv.dinv k c_interp ids dqhyps
+        let sigma,ids_interp = interp_or_and_intro_pattern_option ist env sigma ids in
+        Proofview.Unsafe.tclEVARS sigma <*>
+        name_atomic ~env
+          (TacInversion(DepInversion(k,c_interp,ids),dqhyps))
+          (Inv.dinv k c_interp ids_interp dqhyps)
       end
   | TacInversion (NonDepInversion (k,idl,ids),hyp) ->
       Proofview.Goal.enter begin fun gl ->
@@ -2085,8 +2088,11 @@ and interp_atomic ist tac : unit Proofview.tactic =
         let sigma = Proofview.Goal.sigma gl in
         let hyps = interp_hyp_list ist env sigma idl in
         let dqhyps = interp_declared_or_quantified_hypothesis ist env sigma hyp in
-        let sigma, ids = interp_or_and_intro_pattern_option ist env sigma ids in
-        Proofview.Unsafe.tclEVARS sigma <*> Inv.inv_clause k ids hyps dqhyps
+        let sigma, ids_interp = interp_or_and_intro_pattern_option ist env sigma ids in
+        Proofview.Unsafe.tclEVARS sigma <*>
+        name_atomic ~env
+          (TacInversion (NonDepInversion (k,hyps,ids),dqhyps))
+          (Inv.inv_clause k ids_interp hyps dqhyps)
       end
   | TacInversion (InversionUsing (c,idl),hyp) ->
       Proofview.Goal.enter begin fun gl ->
@@ -2096,9 +2102,9 @@ and interp_atomic ist tac : unit Proofview.tactic =
         let dqhyps = interp_declared_or_quantified_hypothesis ist env sigma hyp in
         let hyps = interp_hyp_list ist env sigma idl in
         Proofview.Unsafe.tclEVARS sigma <*>
-        Leminv.lemInv_clause dqhyps
-          c_interp
-          hyps
+        name_atomic ~env
+          (TacInversion (InversionUsing (c_interp,hyps),dqhyps))
+          (Leminv.lemInv_clause dqhyps c_interp hyps)
       end
 
 (* Initial call for interpretation *)
