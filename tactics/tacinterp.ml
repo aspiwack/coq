@@ -52,11 +52,12 @@ type value = tlevel generic_argument
 (** Abstract application, to print ltac functions *)
 type appl =
   | UnnamedAppl (** For generic applications: nothing is printed *)
-  | GlbAppl of Names.kernel_name * typed_generic_argument list (** For calls to global constants *)
+  | GlbAppl of (Names.kernel_name * typed_generic_argument list) list
+       (** For calls to global constants, some may alias other. *)
 let push_appl appl args =
   match appl with
   | UnnamedAppl -> UnnamedAppl
-  | GlbAppl (h,vs) -> GlbAppl (h,vs@args)
+  | GlbAppl l -> GlbAppl (List.map (fun (h,vs) -> (h,vs@args)) l)
 let pr_generic arg =
   let pr_gtac _ x = Pptactic.pr_glob_tactic (Global.env()) x in
   try
@@ -65,11 +66,18 @@ let pr_generic arg =
 let pr_appl h vs =
   Pptactic.pr_ltac_constant  h ++ spc () ++
   Pp.prlist_with_sep spc pr_generic vs
+let rec name_with_list appl t =
+  match appl with
+  | [] -> t
+  | (h,vs)::l -> Proofview.Trace.name_tactic (fun () -> pr_appl h vs) (name_with_list l t)
 let name_if_glob appl t =
   match appl with
   | UnnamedAppl -> t
-  | GlbAppl (h,vs) ->
-      Proofview.Trace.name_tactic (fun () -> pr_appl h vs) t
+  | GlbAppl l -> name_with_list l t
+let combine_appl appl1 appl2 =
+  match appl1,appl2 with
+  | UnnamedAppl,a | a,UnnamedAppl -> a
+  | GlbAppl l1 , GlbAppl l2 -> GlbAppl (l2@l1)
 
 (* Values for interpretation *)
 type tacvalue =
@@ -88,7 +96,7 @@ let name_vfun appl vle =
   let vle = Value.normalize vle in
   if has_type vle (topwit wit_tacvalue) then
     match to_tacvalue vle with
-    | VFun (_,trace,lfun,vars,t) -> of_tacvalue (VFun (appl,trace,lfun,vars,t))
+    | VFun (appl0,trace,lfun,vars,t) -> of_tacvalue (VFun (combine_appl appl0 appl,trace,lfun,vars,t))
     | _ -> vle
   else vle
 
@@ -1336,7 +1344,7 @@ and interp_ltac_reference loc' mustbetac ist r : typed_generic_argument Ftactic.
       let extra = TacStore.set ist.extra f_avoid_ids ids in 
       let extra = TacStore.set extra f_trace (push_trace loc_info ist) in
       let ist = { lfun = Id.Map.empty; extra = extra; } in
-      let appl = GlbAppl(r,[]) in
+      let appl = GlbAppl[r,[]] in
       val_interp ~appl ist (Tacenv.interp_ltac r)
 
 and interp_tacarg ist arg : typed_generic_argument Ftactic.t =
