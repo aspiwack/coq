@@ -1076,9 +1076,15 @@ let pack_sigma (sigma,c) = {it=c;sigma=sigma;}
 
 (* Interprets an l-tac expression into a value *)
 let rec val_interp ist ?(appl=UnnamedAppl) (tac:glob_tactic_expr) : typed_generic_argument Ftactic.t =
+  (* The name [appl] of applied top-level Ltac names is ignored in
+     [value_interp]. It is installed in the second step by a call to
+     [name_vfun], because it gives more opportunities to detect a
+     [VFun]. Otherwise a [Ltac t := let x := .. in tac] would never
+     register its name since it is syntactically a let, not a
+     function.  *)
   let value_interp ist = match tac with
   | TacFun (it, body) ->
-    Ftactic.return (of_tacvalue (VFun (appl,extract_trace ist, ist.lfun, it, body)))
+    Ftactic.return (of_tacvalue (VFun (UnnamedAppl,extract_trace ist, ist.lfun, it, body)))
   | TacLetIn (true,l,u) -> interp_letrec ist l u
   | TacLetIn (false,l,u) -> interp_letin ist l u
   | TacMatchGoal (lz,lr,lmr) -> interp_match_goal ist lz lr lmr
@@ -1086,17 +1092,18 @@ let rec val_interp ist ?(appl=UnnamedAppl) (tac:glob_tactic_expr) : typed_generi
   | TacArg (loc,a) -> interp_tacarg ist a
   | t ->
     (** Delayed evaluation *)
-    Ftactic.return (of_tacvalue (VFun (appl,extract_trace ist, ist.lfun, [], t)))
+    Ftactic.return (of_tacvalue (VFun (UnnamedAppl,extract_trace ist, ist.lfun, [], t)))
   in
+  let open Ftactic in
   Control.check_for_interrupt ();
   match curr_debug ist with
   | DebugOn lev ->
         let eval v =
           let ist = { ist with extra = TacStore.set ist.extra f_debug v } in
-          value_interp ist
+          value_interp ist >>= fun v -> return (name_vfun appl v)
         in
 	Ftactic.debug_prompt lev tac eval
-  | _ -> value_interp ist
+  | _ -> value_interp ist >>= fun v -> return (name_vfun appl v)
       
 
 and eval_tactic ist tac : unit Proofview.tactic = match tac with
