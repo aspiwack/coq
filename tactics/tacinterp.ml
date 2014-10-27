@@ -1717,7 +1717,8 @@ and interp_atomic ist tac : unit Proofview.tactic =
           (Tactics.intro_move ido mloc)
       end
   | TacExact c ->
-      (* arnaud: todo *)
+      (* spiwack: until the tactic is in the monad *)
+      Proofview.Trace.name_tactic (fun () -> Pp.str"<exact>") begin
       Proofview.V82.tactic begin fun gl -> 
         let (sigma,c_interp) = pf_interp_casted_constr ist gl c in
         tclTHEN
@@ -1725,8 +1726,10 @@ and interp_atomic ist tac : unit Proofview.tactic =
 	  (Tactics.exact_no_check c_interp)
           gl
       end
+      end
   | TacApply (a,ev,cb,cl) ->
-      (* arnaud: todo *)
+      (* spiwack: until the tactic is in the monad *)
+      Proofview.Trace.name_tactic (fun () -> Pp.str"<apply>") begin
       Proofview.Goal.enter begin fun gl ->
         let env = Proofview.Goal.env gl in
         let sigma = Proofview.Goal.sigma gl in
@@ -1740,6 +1743,7 @@ and interp_atomic ist tac : unit Proofview.tactic =
               let sigma,(clear,id,cl) = interp_in_hyp_as ist env sigma cl in
               sigma, fun l -> Tactics.apply_delayed_in a ev clear id l cl in
         Tacticals.New.tclWITHHOLES ev tac sigma l
+      end
       end
   | TacElim (ev,(keep,cb),cbo) ->
       Proofview.Goal.enter begin fun gl ->
@@ -1774,7 +1778,8 @@ and interp_atomic ist tac : unit Proofview.tactic =
           (Proofview.V82.tactic (Tactics.fix idopt n))
       end
   | TacMutualFix (id,n,l) ->
-      (* arnaud: todo *)
+      (* spiwack: until the tactic is in the monad *)
+      Proofview.Trace.name_tactic (fun () -> Pp.str"<mutual fix>") begin
       Proofview.V82.tactic begin fun gl ->
         let env = pf_env gl in
         let f sigma (id,n,c) =
@@ -1788,6 +1793,7 @@ and interp_atomic ist tac : unit Proofview.tactic =
 	  (Tactics.mutual_fix (interp_fresh_ident ist env sigma id) n l_interp 0)
           gl
       end
+      end
   | TacCofix idopt ->
       Proofview.Goal.enter begin fun gl ->
         let env = Proofview.Goal.env gl in
@@ -1798,7 +1804,8 @@ and interp_atomic ist tac : unit Proofview.tactic =
           (Proofview.V82.tactic (Tactics.cofix idopt))
       end
   | TacMutualCofix (id,l) ->
-      (* arnaud: todo *)
+      (* spiwack: until the tactic is in the monad *)
+      Proofview.Trace.name_tactic (fun () -> Pp.str"<mutual cofix>") begin
       Proofview.V82.tactic begin fun gl ->
         let env = pf_env gl in
         let f sigma (id,c) =
@@ -1811,6 +1818,7 @@ and interp_atomic ist tac : unit Proofview.tactic =
 	  (tclEVARS sigma)
 	  (Tactics.mutual_cofix (interp_fresh_ident ist env sigma id) l_interp 0)
           gl
+      end
       end
   | TacAssert (b,t,ipat,c) ->
       Proofview.Goal.enter begin fun gl ->
@@ -1941,10 +1949,12 @@ and interp_atomic ist tac : unit Proofview.tactic =
         (Elim.h_double_induction h1 h2)
   (* Context management *)
   | TacClear (b,l) ->
-      (* arnaud: todo *)
+      (* spiwack: until the tactic is in the monad *)
+      Proofview.Trace.name_tactic (fun () -> Pp.str"<clear>") begin
       Proofview.V82.tactic begin fun gl ->
         let l = interp_hyp_list ist (pf_env gl) (project gl) l in
         if b then Tactics.keep l gl else Tactics.clear l gl
+      end
       end
   | TacClearBody l ->
       Proofview.Goal.enter begin fun gl ->
@@ -1962,7 +1972,8 @@ and interp_atomic ist tac : unit Proofview.tactic =
                    gl
       end
   | TacRename l ->
-      (* arnaud: todo *)
+      (* spiwack: until the tactic is in the monad *)
+      Proofview.Trace.name_tactic (fun () -> Pp.str"<rename>") begin
       Proofview.V82.tactic begin fun gl ->
         let env = pf_env gl in
         let sigma = project gl in
@@ -1970,6 +1981,7 @@ and interp_atomic ist tac : unit Proofview.tactic =
 	  interp_hyp ist env sigma id1,
 	  interp_fresh_ident ist env sigma (snd id2)) l)
           gl
+      end
       end
 
   (* Constructors *)
@@ -1987,7 +1999,8 @@ and interp_atomic ist tac : unit Proofview.tactic =
       end
   (* Conversion *)
   | TacReduce (r,cl) ->
-      (* arnaud: todo *)
+      (* spiwack: until the tactic is in the monad *)
+      Proofview.Trace.name_tactic (fun () -> Pp.str"<reduce>") begin
       Proofview.V82.tactic begin fun gl -> 
         let (sigma,r_interp) = interp_red_expr ist (pf_env gl) (project gl) r in
         tclTHEN
@@ -1995,8 +2008,10 @@ and interp_atomic ist tac : unit Proofview.tactic =
 	  (Tactics.reduce r_interp (interp_clause ist (pf_env gl) (project gl) cl))
           gl
       end
+      end
   | TacChange (None,c,cl) ->
-      (* arnaud: todo *)
+      (* spiwack: until the tactic is in the monad *)
+      Proofview.Trace.name_tactic (fun () -> Pp.str"<change>") begin
       Proofview.V82.nf_evar_goals <*>
       Proofview.V82.tactic begin fun gl ->
         let is_onhyps = match cl.onhyps with
@@ -2015,8 +2030,10 @@ and interp_atomic ist tac : unit Proofview.tactic =
 	  (Tactics.change None c_interp (interp_clause ist (pf_env gl) (project gl) cl))
           gl
       end
+      end
   | TacChange (Some op,c,cl) ->
-      (* arnaud: todo *)
+      (* spiwack: until the tactic is in the monad *)
+      Proofview.Trace.name_tactic (fun () -> Pp.str"<change>") begin
       Proofview.V82.nf_evar_goals <*>
       Proofview.Goal.enter begin fun gl ->
         let env = Proofview.Goal.env gl in
@@ -2033,6 +2050,7 @@ and interp_atomic ist tac : unit Proofview.tactic =
 	      (Tactics.change (Some op) c_interp (interp_clause ist env sigma cl))
 		gl
         end
+      end
       end
 
   (* Equivalence relations *)
