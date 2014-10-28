@@ -1826,7 +1826,7 @@ let interp ?proof locality poly c =
   | VernacDeclareClass id -> vernac_declare_class id
 
   (* Solving *)
-  | VernacSolve (n,tac,b) -> vernac_solve n tac b
+  | VernacSolve (n,_,tac,b) -> vernac_solve n tac b
   | VernacSolveExistential (n,c) -> vernac_solve_existential n c
 
   (* Auxiliary file and library management *)
