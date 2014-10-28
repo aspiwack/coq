@@ -117,12 +117,9 @@ module Info = struct
       trailing semi-colon. *)
   let rec pr_tree with_sep = let open Trace in function
     | Seq (Msg m,[]) -> pr_in_comments m
-    | Seq (Tactic m,[]) ->
+    | Seq (Tactic m,_) ->
         let tail = if with_sep then Pp.str";" else Pp.mt () in
         Pp.(pr_lazy_msg m ++ tail)
-    | Seq (Tactic m,f) ->
-        let tail = if with_sep then Pp.str";" else Pp.mt () in
-        Pp.(pr_lazy_msg m ++ pr_in_comments (fun () -> pr_forest f) ++ tail)
     | Seq (Dispatch,brs) ->
         let tail = if with_sep then Pp.str";" else Pp.mt () in
         Pp.(pr_dispatch brs++tail)
