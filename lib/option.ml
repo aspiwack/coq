@@ -64,7 +64,7 @@ let flatten = function
   | _ -> None
 
 
-(** [flatten x y] is the first element of the concatenation of [x] and
+(** [append x y] is the first element of the concatenation of [x] and
     [y] seen as lists. *)
 let append o1 o2 =
   match o1 with

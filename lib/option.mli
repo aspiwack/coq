@@ -47,9 +47,9 @@ val init : bool -> 'a -> 'a option
 (** [flatten x] is [Some y] if [x] is [Some (Some y)] and [None] otherwise. *)
 val flatten : 'a option option -> 'a option
 
-(** [flatten x y] is the first element of the concatenation of [x] and
-    [y] seen as lists.  In other words, [flatten (Some a) y] is [Some a],
-    [flatten None (Some b)] is [Some b], and [flatten None None] is
+(** [append x y] is the first element of the concatenation of [x] and
+    [y] seen as lists.  In other words, [append (Some a) y] is [Some
+    a], [append None (Some b)] is [Some b], and [append None None] is
     [None]. *)
 val append : 'a option -> 'a option -> 'a option
 
