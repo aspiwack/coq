@@ -59,6 +59,11 @@ module Info : sig
 
   val print : tree -> Pp.std_ppcmds
 
+  (** [collapse n t] flattens the first [n] levels of [Tactic] in an
+      info trace, effectively forgetting about the [n] top level of
+      names (if there are fewer, the last name is kept). *)
+  val collapse : int -> tree -> tree
+
 end
 
 (** Type of proof views: current [evar_map] together with the list of

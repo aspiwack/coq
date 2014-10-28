@@ -143,6 +143,18 @@ module Info = struct
 
   let print f =
     pr_forest (compress f)
+
+  let rec collapse_tree n t =
+    let open Trace in
+    match n , t with
+    | 0 , t -> [t]
+    | _ , (Seq(Tactic _,[]) as t) -> [t]
+    | n , Seq(Tactic _,f) -> collapse (pred n) f
+    | n , Seq(Dispatch,brs) -> [Seq(Dispatch, (collapse n brs))]
+    | n , Seq(DBranch,br) -> [Seq(DBranch, (collapse n br))]
+    | _ , (Seq(Msg _,_) as t) -> [t]
+  and collapse n f =
+    CList.map_append (collapse_tree n) f
 end
 
 
