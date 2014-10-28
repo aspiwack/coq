@@ -806,7 +806,7 @@ let vernac_solve n info tcom b =
     let with_end_tac = if b then Some etac else None in
     let global = match n with SelectAll -> true | _ -> false in
     let (p,status) =
-      solve n (Tacinterp.hide_interp global tcom None) ?with_end_tac p
+      solve n info (Tacinterp.hide_interp global tcom None) ?with_end_tac p
     in
     (* in case a strict subtree was completed,
        go back to the top of the prooftree *)
