@@ -31,7 +31,7 @@ let start_proof (id : Id.t) str sigma hyps c ?init_tac terminator =
   let env = Global.env () in
   ignore (Proof_global.with_current_proof (fun _ p ->
     match init_tac with
-    | None -> p,true
+    | None -> p,(true,[])
     | Some tac -> Proof.run_tactic env tac p))
 
 let cook_this_proof p =
@@ -99,7 +99,9 @@ let solve ?with_end_tac gi tac pr =
       | Vernacexpr.SelectAllParallel ->
           Errors.anomaly(str"SelectAllParallel not handled by Stm")
     in
-    Proof.run_tactic (Global.env ()) tac pr
+    let (p,(status,info)) = Proof.run_tactic (Global.env ()) tac pr in
+    let () = Pp.ppnl (Proofview.Trace.pr_info info) in
+    (p,status)
   with
     | Proof_global.NoCurrentProof  -> Errors.error "No focused proof"
     | CList.IndexOutOfRange ->

@@ -799,7 +799,7 @@ let command_focus = Proof.new_focus_kind ()
 let focus_command_cond = Proof.no_cond command_focus
 
 
-let vernac_solve n tcom b =
+let vernac_solve n info tcom b =
   if not (refining ()) then
     error "Unknown command of the non proof-editing mode.";
   let status = Proof_global.with_current_proof (fun etac p ->
@@ -1826,7 +1826,7 @@ let interp ?proof locality poly c =
   | VernacDeclareClass id -> vernac_declare_class id
 
   (* Solving *)
-  | VernacSolve (n,_,tac,b) -> vernac_solve n tac b
+  | VernacSolve (n,info,tac,b) -> vernac_solve n info tac b
   | VernacSolveExistential (n,c) -> vernac_solve_existential n c
 
   (* Auxiliary file and library management *)
