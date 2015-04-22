@@ -32,7 +32,9 @@ end = struct
     | GTwo of 'a*'a
     | GThree of 'a*'a*'a
     | GFour of 'a*'a*'a*'a
-    | GNode of 'a t * 'a t
+    | GNode2 of 'a t * 'a t
+    | GNode3 of 'a t * 'a t * 'a t
+    | GNode4 of 'a t * 'a t * 'a t * 'a t
 
   let atom x = GOne x
 
@@ -40,13 +42,21 @@ end = struct
     match x, y with
     | GEmpty, _ -> y
     | _, GEmpty -> x
+    (* growing leaves *)
     | GOne x , GOne y -> GTwo (x,y)
     | GOne x , GTwo (y,z)
     | GTwo (x,y) , GOne z -> GThree (x,y,z)
     | GOne x , GThree (y,z,w)
     | GTwo (x,y) , GTwo (z,w)
     | GThree (x,y,z) , GOne w -> GFour (x,y,z,w)
-    | _, _ -> GNode (x,y)
+    (* growing nodes *)
+    | (GOne _|GTwo _|GThree _|GFour _ as x) , GNode2(y,z)
+    | GNode2(x,y) , (GOne _|GTwo _|GThree _|GFour _ as z) -> GNode3(x,y,z)
+    | (GOne _|GTwo _|GThree _|GFour _ as x) , GNode3(y,z,w)
+    | GNode2(x,y) , GNode2(z,w)
+    | GNode3(x,y,z) , (GOne _|GTwo _|GThree _|GFour _ as w) -> GNode4(x,y,z,w)
+    (* growing height *)
+    | _, _ -> GNode2 (x,y)
 
   let empty = GEmpty
 
@@ -58,7 +68,9 @@ end = struct
     | GTwo (x,y) -> f x ; f y
     | GThree (x,y,z) -> f x ; f y ; f z
     | GFour (x,y,z,w) -> f x ; f y ; f z ; f w
-    | GNode (x,y) -> iter f x; iter f y
+    | GNode2 (x,y) -> iter f x; iter f y
+    | GNode3 (x,y,z) -> iter f x; iter f y; iter f z
+    | GNode4 (x,y,z,w) -> iter f x; iter f y; iter f z; iter f w
 
   let rec map f = function
     | GEmpty -> GEmpty
@@ -66,7 +78,9 @@ end = struct
     | GTwo (x,y) -> GTwo (f x,f y)
     | GThree (x,y,z) -> GThree (f x, f y , f z)
     | GFour (x,y,z,w) -> GFour (f x, f y , f z , f w)
-    | GNode (x,y) -> GNode (map f x, map f y)
+    | GNode2 (x,y) -> GNode2 (map f x, map f y)
+    | GNode3 (x,y,z) -> GNode3 (map f x, map f y, map f z)
+    | GNode4 (x,y,z,w) -> GNode4 (map f x, map f y, map f z, map f w)
 
 end
 
