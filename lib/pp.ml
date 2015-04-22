@@ -26,14 +26,26 @@ module Glue : sig
 
 end = struct
 
-  type 'a t = GEmpty | GLeaf of 'a | GNode of 'a t * 'a t
+  type 'a t =
+    | GEmpty
+    | GOne of 'a
+    | GTwo of 'a*'a
+    | GThree of 'a*'a*'a
+    | GFour of 'a*'a*'a*'a
+    | GNode of 'a t * 'a t
 
-  let atom x = GLeaf x
+  let atom x = GOne x
 
   let glue x y =
     match x, y with
     | GEmpty, _ -> y
     | _, GEmpty -> x
+    | GOne x , GOne y -> GTwo (x,y)
+    | GOne x , GTwo (y,z)
+    | GTwo (x,y) , GOne z -> GThree (x,y,z)
+    | GOne x , GThree (y,z,w)
+    | GTwo (x,y) , GTwo (z,w)
+    | GThree (x,y,z) , GOne w -> GFour (x,y,z,w)
     | _, _ -> GNode (x,y)
 
   let empty = GEmpty
@@ -42,12 +54,18 @@ end = struct
 
   let rec iter f = function
     | GEmpty -> ()
-    | GLeaf x -> f x
+    | GOne x -> f x
+    | GTwo (x,y) -> f x ; f y
+    | GThree (x,y,z) -> f x ; f y ; f z
+    | GFour (x,y,z,w) -> f x ; f y ; f z ; f w
     | GNode (x,y) -> iter f x; iter f y
 
   let rec map f = function
     | GEmpty -> GEmpty
-    | GLeaf x -> GLeaf (f x)
+    | GOne x -> GOne (f x)
+    | GTwo (x,y) -> GTwo (f x,f y)
+    | GThree (x,y,z) -> GThree (f x, f y , f z)
+    | GFour (x,y,z,w) -> GFour (f x, f y , f z , f w)
     | GNode (x,y) -> GNode (map f x, map f y)
 
 end
