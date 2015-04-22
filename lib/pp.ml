@@ -29,16 +29,14 @@ end = struct
   type 'a t =
     | GEmpty
     | GOne of 'a
-    | GTwo of 'a*'a
-    | GThree of 'a*'a*'a
-    | GFour of 'a*'a*'a*'a
-    | GNode2 of 'a t * 'a t
-    | GNode3 of 'a t * 'a t * 'a t
-    | GNode4 of 'a t * 'a t * 'a t * 'a t
+    | GTwo of 'a * 'a
+    | GThree of 'a * 'a * 'a
+    | GFour of 'a * 'a * 'a * 'a
+    | GNode of 'a t t
 
   let atom x = GOne x
 
-  let glue x y =
+  let rec glue : 'a. 'a t -> 'a t -> 'a t = fun x y ->
     match x, y with
     | GEmpty, _ -> y
     | _, GEmpty -> x
@@ -49,38 +47,30 @@ end = struct
     | GOne x , GThree (y,z,w)
     | GTwo (x,y) , GTwo (z,w)
     | GThree (x,y,z) , GOne w -> GFour (x,y,z,w)
-    (* growing nodes *)
-    | (GOne _|GTwo _|GThree _|GFour _ as x) , GNode2(y,z)
-    | GNode2(x,y) , (GOne _|GTwo _|GThree _|GFour _ as z) -> GNode3(x,y,z)
-    | (GOne _|GTwo _|GThree _|GFour _ as x) , GNode3(y,z,w)
-    | GNode2(x,y) , GNode2(z,w)
-    | GNode3(x,y,z) , (GOne _|GTwo _|GThree _|GFour _ as w) -> GNode4(x,y,z,w)
-    (* growing height *)
-    | _, _ -> GNode2 (x,y)
+    (* merging nodes *)
+    | GNode x , GNode y -> GNode (glue x y)
+    (* increasing height *)
+    | _ , _ -> GNode (GTwo (x,y))
 
   let empty = GEmpty
 
   let is_empty x = x = GEmpty
 
-  let rec iter f = function
+  let rec iter : 'a. ('a -> unit) -> 'a t -> unit = fun f -> function
     | GEmpty -> ()
     | GOne x -> f x
     | GTwo (x,y) -> f x ; f y
     | GThree (x,y,z) -> f x ; f y ; f z
     | GFour (x,y,z,w) -> f x ; f y ; f z ; f w
-    | GNode2 (x,y) -> iter f x; iter f y
-    | GNode3 (x,y,z) -> iter f x; iter f y; iter f z
-    | GNode4 (x,y,z,w) -> iter f x; iter f y; iter f z; iter f w
+    | GNode x -> iter (fun t -> iter f t) x
 
-  let rec map f = function
+  let rec map : 'a 'b. ('a->'b) -> 'a t -> 'b t = fun f -> function
     | GEmpty -> GEmpty
     | GOne x -> GOne (f x)
     | GTwo (x,y) -> GTwo (f x,f y)
     | GThree (x,y,z) -> GThree (f x, f y , f z)
     | GFour (x,y,z,w) -> GFour (f x, f y , f z , f w)
-    | GNode2 (x,y) -> GNode2 (map f x, map f y)
-    | GNode3 (x,y,z) -> GNode3 (map f x, map f y, map f z)
-    | GNode4 (x,y,z,w) -> GNode4 (map f x, map f y, map f z, map f w)
+    | GNode x -> GNode (map (fun t -> map f t) x)
 
 end
 
