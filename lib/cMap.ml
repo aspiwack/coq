@@ -26,6 +26,7 @@ sig
   include CSig.MapS
   module Set : CSig.SetS with type elt = key
   val get : key -> 'a t -> 'a
+  val find_default : 'a -> key ->  'a t -> 'a
   val update : key -> 'a -> 'a t -> 'a t
   val modify : key -> (key -> 'a -> 'a) -> 'a t -> 'a t
   val domain : 'a t -> Set.t
@@ -209,4 +210,5 @@ struct
   include Map.Make(M)
   include MapExt(M)
   let get k m = try find k m with Not_found -> assert false
+  let find_default dflt k m = try find k m with Not_found -> dflt
 end

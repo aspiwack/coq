@@ -288,6 +288,8 @@ struct
 
   let get k s = try find k s with Not_found -> assert false
 
+  let find_default dflt k m = try find k m with Not_found -> dflt
+
   let split k s = assert false (** Cannot be implemented efficiently *)
 
   let map f s =

@@ -34,6 +34,11 @@ sig
   val get : key -> 'a t -> 'a
   (** Same as {!find} but fails an assertion instead of raising [Not_found] *)
 
+  val find_default : 'a -> key ->  'a t -> 'a
+  (** [find_default dflt k m] returns as [find k m] except that it
+      returns [dflt] if [k] is absent from [m] instead of raising
+      [Not_found]. *)
+
   val update : key -> 'a -> 'a t -> 'a t
   (** Same as [add], but expects the key to be present, and thus faster.
       @raise Not_found when the key is unbound in the map. *)
