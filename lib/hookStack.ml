@@ -23,4 +23,4 @@ let run r x =
     | [] -> x
     | f::r -> run (f x) r
   in
-  run x r
+  run x !r

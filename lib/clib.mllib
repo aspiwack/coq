@@ -3,6 +3,7 @@ Coq_config
 Terminal
 Canary
 Hook
+HookStack
 Hashset
 Hashcons
 CSet
