@@ -2077,5 +2077,16 @@ let interp ?(verbosely=true) ?proof (loc,c) =
     if verbosely then Flags.verbosely (aux false) c
     else aux false c
 
+let (run_attribute_hooks,attribute_hooks) = HookStack.make ()
+
 let () = Hook.set Stm.interp_hook interp
 let () = Hook.set Stm.with_fail_hook with_fail
+
+let interp_with_attributes ?verbosely ?proof (loc,c) aset =
+  let (c',aset') = HookStack.run run_attribute_hooks (c,aset) in
+  let () =
+    if not (Attributes.Set.is_empty aset') then
+      Feedback.msg_warning ~loc (str"Unused attributes")
+      (* TODO: print unused attributes *)
+  in
+  interp ?verbosely ?proof (loc,c')

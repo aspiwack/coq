@@ -29,6 +29,17 @@ val interp :
   ?proof:Proof_global.closed_proof ->
     Loc.t * Vernacexpr.vernac_expr -> unit
 
+val attribute_hooks : (Vernacexpr.vernac_expr*Attributes.Set.t) HookStack.t
+
+(** Applies the hooks in the current state of {!attribute_hooks} from
+    the most recent to the oldest. Throws a warning if attributes are left
+    unconsumed after all the hooks have run. Then calls {!interp} with the
+    resulting vernacular command (the location remains unchanged). *)
+val interp_with_attributes :
+  ?verbosely:bool ->
+  ?proof:Proof_global.closed_proof ->
+    Loc.t * Vernacexpr.vernac_expr -> Attributes.Set.t -> unit
+
 (** Print subgoals when the verbose flag is on.
     Meant to be used inside vernac commands from plugins. *)
 
