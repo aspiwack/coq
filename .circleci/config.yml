@@ -44,7 +44,7 @@ jobs:
             # XXX: all this .profile stuff is a shortcoming of the
             # docker image. To be improved.
             . ~/.profile
-            ./configure -local
+            ./configure -local -native-compiler no
       - run:
           name: Build -j2
           command: |
