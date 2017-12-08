@@ -112,12 +112,12 @@ workflows:
     jobs:
       - build
       - bignums:
-        requires:
-        - build
+          requires:
+            - build
       - color:
-        requires:
-        - build
-        - bignums
+          requires:
+            - build
+            - bignums
       - compcert:
-        requires:
-        - build
+          requires:
+            - build
