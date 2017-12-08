@@ -46,10 +46,10 @@ jobs:
             . ~/.profile
             ./configure -local -native-compiler no
       - run:
-          name: Build -j2
+          name: Build
           command: |
             . ~/.profile
-            make
+            make -j2
       - run:
           name: Validate
           command: |
