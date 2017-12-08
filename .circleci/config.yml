@@ -72,7 +72,7 @@ jobs:
           name: Build
           command: |
             . ~/.profile
-            make -j2 TIMED=1 ci-bignums
+            make -j2 ci-bignums
       # bignums is a dependency
       - persist_to_workspace:
           root: &workspace ~/
@@ -90,7 +90,7 @@ jobs:
           name: Build
           command: |
             . ~/.profile
-            make -j2 TIMED=1 ci-color
+            make -j2 ci-color
 
   compcert:
     <<: *coq
@@ -103,7 +103,7 @@ jobs:
           name: Build
           command: |
             . ~/.profile
-            make -j2 TIMED=1 ci-compcert
+            make -j2 ci-compcert
 
 workflows:
   version: 2
