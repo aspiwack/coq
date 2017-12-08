@@ -30,6 +30,9 @@ jobs:
       - run:
           name: Build opam dependencies
           command: |
+            # workaround, ought to be fixed in recent opams. See
+            # https://github.com/ocaml/opam/issues/2978
+            export TERM=xterm
             opam install -y camlp5 ocamlfind
       - save_cache:
           key: coq-opam-cache-{{ arch }}-v171208-static-deps
@@ -37,13 +40,21 @@ jobs:
             - ~/.opam
       - run:
           name: Configure
-          command: ./configure -local
+          command: |
+            # XXX: all this .profile stuff is a shortcoming of the
+            # docker image. To be improved.
+            . ~/.profile
+            ./configure -local
       - run:
           name: Build -j2
-          command: make
+          command: |
+            . ~/.profile
+            make
       - run:
           name: Validate
-          command: make -j2 validate
+          command: |
+            . ~/.profile
+            make -j2 validate
       - persist_to_workspace:
           root: &workspace ~/
           paths:
@@ -59,7 +70,9 @@ jobs:
           at: *workspace
       - run:
           name: Build
-          command: make -j2 TIMED=1 ci-bignums
+          command: |
+            . ~/.profile
+            make -j2 TIMED=1 ci-bignums
       # bignums is a dependency
       - persist_to_workspace:
           root: &workspace ~/
@@ -75,7 +88,9 @@ jobs:
           at: *workspace
       - run:
           name: Build
-          command: make -j2 TIMED=1 ci-color
+          command: |
+            . ~/.profile
+            make -j2 TIMED=1 ci-color
 
   compcert:
     <<: *coq
@@ -86,7 +101,9 @@ jobs:
           at: *workspace
       - run:
           name: Build
-          command: make -j2 TIMED=1 ci-compcert
+          command: |
+            . ~/.profile
+            make -j2 TIMED=1 ci-compcert
 
 workflows:
   version: 2
