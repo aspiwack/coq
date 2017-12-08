@@ -3,7 +3,7 @@ defaults:
     # Following parameters are used in Coq CircleCI Job (using yaml
     # reference syntax)
     working_directory: &workdir ~/coq
-    base_image: &base opam:ubuntu-16.04_ocaml-4.05.0_flambda
+    base_image: &base ocaml/opam:ubuntu-16.04_ocaml-4.05.0_flambda
 
   # Job configuration
   config: &coq
@@ -25,7 +25,7 @@ jobs:
       - run:
           name: Install system dependencies for build
           command: |
-            apt-get update && apt-get install -y
+            sudo apt-get update && sudo apt-get install -y \
               aspcud \
               libgtk2.0-dev \
               libgtksourceview2.0-dev \
@@ -45,7 +45,6 @@ jobs:
       # vYYMMDD format to avoid collision.
       - restore_cache:
           key: coq-opam-cache-{{ arch }}-v171208-
-      - run:
       - run:
           name: Build opam dependencies
           command: |
