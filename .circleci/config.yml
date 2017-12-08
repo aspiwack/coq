@@ -22,24 +22,6 @@ jobs:
     <<: *coq
     steps:
       - checkout
-      - run:
-          name: Install system dependencies for build
-          command: |
-            sudo apt-get update && sudo apt-get install -y \
-              aspcud \
-              libgtk2.0-dev \
-              libgtksourceview2.0-dev \
-              texlive-latex-base \
-              texlive-latex-recommended \
-              texlive-latex-extra \
-              texlive-math-extra \
-              texlive-fonts-recommended \
-              texlive-fonts-extra \
-              latex-xcolor \
-              ghostscript \
-              transfig \
-              imagemagick \
-              tipa
       # Restore last version of the dependencies in cache When a new
       # major version of caches has to be generated, please use
       # vYYMMDD format to avoid collision.
@@ -48,7 +30,7 @@ jobs:
       - run:
           name: Build opam dependencies
           command: |
-            opam install -y camlp5 ocamlfind hevea lablgtk lablgtk-extras
+            opam install -y camlp5 ocamlfind
       - save_cache:
           key: coq-opam-cache-{{ arch }}-v171208-static-deps
           paths:
