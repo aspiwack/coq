@@ -74,6 +74,11 @@ jobs:
       - attach_workspace:
           at: *workspace
       - run:
+          name: System dependencies
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y python
+      - run:
           name: Build
           command: |
             . ~/.profile
@@ -92,7 +97,7 @@ jobs:
       - attach_workspace:
           at: *workspace
       - run:
-          name: Systme dependencies
+          name: System dependencies
           command: |
             sudo apt-get update
             sudo apt-get install -y python
@@ -110,7 +115,7 @@ jobs:
       - attach_workspace:
           at: *workspace
       - run:
-          name: Systme dependencies
+          name: System dependencies
           command: |
             sudo apt-get update
             sudo apt-get install -y python
