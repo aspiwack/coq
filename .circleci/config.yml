@@ -10,6 +10,11 @@ defaults:
     working_directory: *workdir
     docker:
       - image: *base
+    environment:
+      # required by some of the targets, e.g. compcert, passed for
+      # instance to opam to configure the number of parallel jobs
+      # allowed
+      - NJOBS: 2
 
 version: 2
 
@@ -87,6 +92,11 @@ jobs:
       - attach_workspace:
           at: *workspace
       - run:
+          name: Systme dependencies
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y python
+      - run:
           name: Build
           command: |
             . ~/.profile
@@ -99,6 +109,11 @@ jobs:
       - checkout
       - attach_workspace:
           at: *workspace
+      - run:
+          name: Systme dependencies
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y python
       - run:
           name: Build
           command: |
